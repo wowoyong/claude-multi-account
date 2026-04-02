@@ -32,6 +32,14 @@ public struct Profile: Identifiable, Equatable {
     }
 }
 
+extension JSONEncoder {
+    public static let profileEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+}
+
 extension JSONDecoder {
     public static let profileDecoder: JSONDecoder = {
         let decoder = JSONDecoder()

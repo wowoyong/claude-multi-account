@@ -124,7 +124,7 @@ public final class ProfileManager {
             scopes: current.claudeAiOauth.scopes,
             savedAt: Date()
         )
-        let metaData = try JSONEncoder().encode(meta)
+        let metaData = try JSONEncoder.profileEncoder.encode(meta)
         try metaData.write(to: profileDir.appendingPathComponent("meta.json"))
     }
 

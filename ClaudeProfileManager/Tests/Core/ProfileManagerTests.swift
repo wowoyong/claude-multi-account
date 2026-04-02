@@ -43,7 +43,7 @@ final class ProfileManagerTests: XCTestCase {
             subscriptionType: "max", rateLimitTier: "20x",
             email: "test@example.com", scopes: ["user:inference"], savedAt: Date()
         )
-        try JSONEncoder().encode(meta).write(to: profileDir.appendingPathComponent("meta.json"))
+        try JSONEncoder.profileEncoder.encode(meta).write(to: profileDir.appendingPathComponent("meta.json"))
 
         let profiles = try manager.listProfiles()
         XCTAssertEqual(profiles.count, 1)
@@ -62,7 +62,7 @@ final class ProfileManagerTests: XCTestCase {
         )
         try JSONEncoder().encode(CredentialWrapper(claudeAiOauth: oauth, mcpOAuth: nil))
             .write(to: profileDir.appendingPathComponent(".credentials.json"))
-        try JSONEncoder().encode(ProfileMeta(
+        try JSONEncoder.profileEncoder.encode(ProfileMeta(
             subscriptionType: "max", rateLimitTier: "20x",
             email: "me@test.com", scopes: [], savedAt: Date()
         )).write(to: profileDir.appendingPathComponent("meta.json"))
@@ -84,7 +84,7 @@ final class ProfileManagerTests: XCTestCase {
         )
         try JSONEncoder().encode(CredentialWrapper(claudeAiOauth: savedOAuth, mcpOAuth: nil))
             .write(to: profileDir.appendingPathComponent(".credentials.json"))
-        try JSONEncoder().encode(ProfileMeta(
+        try JSONEncoder.profileEncoder.encode(ProfileMeta(
             subscriptionType: "pro", rateLimitTier: "default",
             email: "unique@test.com", scopes: [], savedAt: Date()
         )).write(to: profileDir.appendingPathComponent("meta.json"))
