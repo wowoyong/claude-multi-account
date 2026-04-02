@@ -14,6 +14,7 @@
 		11894513C869CA9F0C6D88A9 /* SwitchLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A532431E1CE44B738A352647 /* SwitchLogTests.swift */; };
 		1585AA836B48AFB4180C9BD0 /* MockCredentialBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B2E5FB94903983AC5185EC /* MockCredentialBackend.swift */; };
 		27016FADC61861E71F6D5891 /* UsageTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A595942B9CDFC641E62296BC /* UsageTracker.swift */; };
+		2B043F9F1345FC2E06757986 /* TokenBarChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BBE8331E0D77FDCD4C858A0 /* TokenBarChart.swift */; };
 		2BE37892AF70B9D73ACCBADC /* ProfileManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C942CAFAC2C1DEDC482EC99E /* ProfileManagerTests.swift */; };
 		2D8BA0D44CE85DB375653B8E /* ClaudeProfileManagerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A7C6958DC69CB61864D7531 /* ClaudeProfileManagerApp.swift */; };
 		3686244AF7CACC51706BC7CD /* SessionGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04DA8422931385131320448B /* SessionGuardTests.swift */; };
@@ -26,14 +27,15 @@
 		82476744A3B119FB4E067710 /* ProfileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D679B97350CCD3BC34E0705D /* ProfileManager.swift */; };
 		9EE5C3D92BA9EFA927A5D719 /* TokenKeeperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00829D9BA67AF70AE060F6EB /* TokenKeeperTests.swift */; };
 		A128452F8327C9C32A84EF47 /* UsageRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBE81A5213B0D24244ACBE6F /* UsageRecord.swift */; };
+		A1A7EE013731E3FDDFF91BBC /* HeatmapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B5A42589ED1924F475B4C6 /* HeatmapView.swift */; };
 		AE163C8EE2648902678E6962 /* TokenKeeper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F7A5FFA58B796AED37CB39 /* TokenKeeper.swift */; };
 		AE77F678D83C1A071FD4429B /* ProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DC6FCF769CCC442CE0FC4D3 /* ProfileTests.swift */; };
+		BC9EC34909B907DC85C678D3 /* ProfileDailyChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 090628A84104892629D358C6 /* ProfileDailyChart.swift */; };
 		C753E351A8B1F65CFABCF739 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADFF0D20D292B4EAA9EA2C2 /* Profile.swift */; };
 		CAC70446F6AA5EBB9D96507B /* OAuthCredentialTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 879CA793018C153B3FD5ED38 /* OAuthCredentialTests.swift */; };
 		CB64CB9B26C694CDEB25EBF1 /* ClientIDResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 266BA793047B4E7010C71A80 /* ClientIDResolverTests.swift */; };
 		D41320B65EA717988F5E3128 /* SessionGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C0D78A2E3D40985B889F1D2 /* SessionGuard.swift */; };
 		D676171685ED0114515333D7 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F9FF1A278DF58793CA3383E /* AppState.swift */; };
-		D82E515628AB23AAC40273DC /* HeatmapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F722D333A781E4B7BEF5C75 /* HeatmapView.swift */; };
 		FAED11C2B871FD6F1041860E /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 600FBCE03E9F2F6C4BB275D0 /* OnboardingView.swift */; };
 		FE6D3958CB354F67EAE540BD /* ClientIDResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8750C3A0C8398F319BA080E6 /* ClientIDResolver.swift */; };
 /* End PBXBuildFile section */
@@ -51,8 +53,10 @@
 /* Begin PBXFileReference section */
 		00829D9BA67AF70AE060F6EB /* TokenKeeperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenKeeperTests.swift; sourceTree = "<group>"; };
 		04DA8422931385131320448B /* SessionGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionGuardTests.swift; sourceTree = "<group>"; };
+		090628A84104892629D358C6 /* ProfileDailyChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileDailyChart.swift; sourceTree = "<group>"; };
 		13B2E5FB94903983AC5185EC /* MockCredentialBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockCredentialBackend.swift; sourceTree = "<group>"; };
 		1A7C6958DC69CB61864D7531 /* ClaudeProfileManagerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeProfileManagerApp.swift; sourceTree = "<group>"; };
+		1BBE8331E0D77FDCD4C858A0 /* TokenBarChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenBarChart.swift; sourceTree = "<group>"; };
 		21677CFA27693F186C4C9DFF /* ClaudeProfileManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeProfileManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		266BA793047B4E7010C71A80 /* ClientIDResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClientIDResolverTests.swift; sourceTree = "<group>"; };
 		2ADFF0D20D292B4EAA9EA2C2 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
@@ -61,9 +65,9 @@
 		2DA954AD144DAFE3DAF8B748 /* KeychainBackendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainBackendTests.swift; sourceTree = "<group>"; };
 		32053E26904DD4C7A10C0720 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 		35287C526D59F59232AC666A /* .gitkeep */ = {isa = PBXFileReference; path = .gitkeep; sourceTree = "<group>"; };
+		36B5A42589ED1924F475B4C6 /* HeatmapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapView.swift; sourceTree = "<group>"; };
 		55EEA94FC7325851F4AE9B59 /* SwitchLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitchLog.swift; sourceTree = "<group>"; };
 		5941828A1593879FAD1FF781 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		5F722D333A781E4B7BEF5C75 /* HeatmapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatmapView.swift; sourceTree = "<group>"; };
 		600FBCE03E9F2F6C4BB275D0 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		646B0AA23F829FC0F7ED67E7 /* ProfileCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileCardView.swift; sourceTree = "<group>"; };
 		6F9FF1A278DF58793CA3383E /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -220,9 +224,11 @@
 			isa = PBXGroup;
 			children = (
 				C2AAF8077B5EE068FB737E3F /* DashboardView.swift */,
+				36B5A42589ED1924F475B4C6 /* HeatmapView.swift */,
 				8A658ABB25C43B2500340F61 /* ModelBreakdownView.swift */,
 				646B0AA23F829FC0F7ED67E7 /* ProfileCardView.swift */,
-				5F722D333A781E4B7BEF5C75 /* HeatmapView.swift */,
+				090628A84104892629D358C6 /* ProfileDailyChart.swift */,
+				1BBE8331E0D77FDCD4C858A0 /* TokenBarChart.swift */,
 			);
 			path = Dashboard;
 			sourceTree = "<group>";
@@ -343,6 +349,7 @@
 				FE6D3958CB354F67EAE540BD /* ClientIDResolver.swift in Sources */,
 				01B2772822235E4F9B1792ED /* CredentialBackend.swift in Sources */,
 				58722403B9671C68FFDE2CC7 /* DashboardView.swift in Sources */,
+				A1A7EE013731E3FDDFF91BBC /* HeatmapView.swift in Sources */,
 				3D889F34023BECCF29E6E512 /* KeychainBackend.swift in Sources */,
 				0ACD37DA9B69B77A8E91690B /* MenuBarView.swift in Sources */,
 				07577AE87E3993B2FF0F5E51 /* ModelBreakdownView.swift in Sources */,
@@ -350,11 +357,12 @@
 				FAED11C2B871FD6F1041860E /* OnboardingView.swift in Sources */,
 				C753E351A8B1F65CFABCF739 /* Profile.swift in Sources */,
 				70A88E879B538EE632573EC6 /* ProfileCardView.swift in Sources */,
+				BC9EC34909B907DC85C678D3 /* ProfileDailyChart.swift in Sources */,
 				82476744A3B119FB4E067710 /* ProfileManager.swift in Sources */,
 				D41320B65EA717988F5E3128 /* SessionGuard.swift in Sources */,
 				0D76D516FC1D146AFE748E4C /* SwitchLog.swift in Sources */,
+				2B043F9F1345FC2E06757986 /* TokenBarChart.swift in Sources */,
 				AE163C8EE2648902678E6962 /* TokenKeeper.swift in Sources */,
-				D82E515628AB23AAC40273DC /* HeatmapView.swift in Sources */,
 				A128452F8327C9C32A84EF47 /* UsageRecord.swift in Sources */,
 				27016FADC61861E71F6D5891 /* UsageTracker.swift in Sources */,
 			);

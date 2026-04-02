@@ -62,34 +62,90 @@ public final class UsageTracker {
 
     /// Sum tokens from individual session files modified today
     public func todayUsageFromSessionFiles() -> Int {
-        let claudeDir = profilesDirectory.deletingLastPathComponent() // ~/.claude/
-        let fm = FileManager.default
-        let today = Self.todayString()
-
-        guard let files = try? fm.contentsOfDirectory(atPath: claudeDir.path) else {
-            print("[UsageTracker] Cannot read \(claudeDir.path)")
-            return 0
-        }
-
-        var total = 0
-        for file in files where file.hasPrefix("token-stats") && file.hasSuffix(".json") {
-            let path = claudeDir.appendingPathComponent(file)
-            guard let attrs = try? fm.attributesOfItem(atPath: path.path),
-                  let modDate = attrs[.modificationDate] as? Date else { continue }
-
-            let modDay = Self.dateToString(modDate)
-            if modDay == today {
-                if let data = try? Data(contentsOf: path),
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let tokens = json["totalTokens"] as? Int {
-                    total += tokens
-                }
-            }
-        }
-        return total
+        realtimeDailyUsage(lastDays: 1).values.reduce(0, +)
     }
 
-    private static func dateToString(_ date: Date) -> String {
+    // MARK: - Realtime Parsing (token-stats-*.json)
+
+    /// Daily token usage from token-stats files using file birth time (session start).
+    /// Returns dict of date string -> tokens, covering last `lastDays` days.
+    public func realtimeDailyUsage(lastDays: Int = 30) -> [String: Int] {
+        let claudeDir = profilesDirectory.deletingLastPathComponent()
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(atPath: claudeDir.path) else { return [:] }
+
+        let cutoff = Calendar.current.date(byAdding: .day, value: -lastDays, to: Date())!
+        var result: [String: Int] = [:]
+
+        for file in files where file.hasPrefix("token-stats") && file.hasSuffix(".json") {
+            let path = claudeDir.appendingPathComponent(file)
+            guard let attrs = try? fm.attributesOfItem(atPath: path.path) else { continue }
+            let sessionStart = (attrs[.creationDate] as? Date) ?? (attrs[.modificationDate] as? Date)!
+            guard sessionStart >= cutoff else { continue }
+
+            guard let data = try? Data(contentsOf: path),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tokens = json["totalTokens"] as? Int, tokens > 0 else { continue }
+
+            let dateStr = Self.dateToString(sessionStart)
+            result[dateStr, default: 0] += tokens
+        }
+        return result
+    }
+
+    /// Hourly token distribution for today from token-stats files.
+    /// Returns dict of hour (0–23) -> tokens.
+    public func realtimeHourlyToday() -> [Int: Int] {
+        let claudeDir = profilesDirectory.deletingLastPathComponent()
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(atPath: claudeDir.path) else { return [:] }
+
+        let today = Self.todayString()
+        var result: [Int: Int] = [:]
+
+        for file in files where file.hasPrefix("token-stats") && file.hasSuffix(".json") {
+            let path = claudeDir.appendingPathComponent(file)
+            guard let attrs = try? fm.attributesOfItem(atPath: path.path) else { continue }
+            let sessionStart = (attrs[.creationDate] as? Date) ?? (attrs[.modificationDate] as? Date)!
+            guard Self.dateToString(sessionStart) == today else { continue }
+
+            guard let data = try? Data(contentsOf: path),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tokens = json["totalTokens"] as? Int, tokens > 0 else { continue }
+
+            let hour = Calendar.current.component(.hour, from: sessionStart)
+            result[hour, default: 0] += tokens
+        }
+        return result
+    }
+
+    /// Monthly token usage from token-stats files.
+    /// Returns dict of "yyyy-MM" -> tokens.
+    public func realtimeMonthlyUsage() -> [String: Int] {
+        let claudeDir = profilesDirectory.deletingLastPathComponent()
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(atPath: claudeDir.path) else { return [:] }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM"
+        var result: [String: Int] = [:]
+
+        for file in files where file.hasPrefix("token-stats") && file.hasSuffix(".json") {
+            let path = claudeDir.appendingPathComponent(file)
+            guard let attrs = try? fm.attributesOfItem(atPath: path.path) else { continue }
+            let sessionStart = (attrs[.creationDate] as? Date) ?? (attrs[.modificationDate] as? Date)!
+
+            guard let data = try? Data(contentsOf: path),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tokens = json["totalTokens"] as? Int, tokens > 0 else { continue }
+
+            let monthStr = formatter.string(from: sessionStart)
+            result[monthStr, default: 0] += tokens
+        }
+        return result
+    }
+
+    public static func dateToString(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: date)

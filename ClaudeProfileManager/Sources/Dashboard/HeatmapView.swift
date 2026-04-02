@@ -39,7 +39,9 @@ struct HeatmapView: View {
                             }
                         }
                     }
+                    .padding(.vertical, 2)
                 }
+                .frame(height: 108)
 
                 // Legend
                 HStack(spacing: 4) {

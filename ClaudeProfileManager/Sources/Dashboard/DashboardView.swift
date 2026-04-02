@@ -2,107 +2,195 @@ import SwiftUI
 
 struct DashboardView: View {
     @ObservedObject var appState: AppState
-    @State private var dailyUsage: [DailyModelTokens] = []
-    @State private var overallBreakdown: [String: Int] = [:]
-    @State private var todayTotal = 0
-    @State private var weeklyTotal = 0
-    @State private var monthlyTotal = 0
     @State private var profileUsages: UsageDatabase = [:]
+    @State private var hourlyData: [(label: String, tokens: Int)] = []
+    @State private var dailyData: [(label: String, tokens: Int)] = []
+    @State private var monthlyData: [(label: String, tokens: Int)] = []
     @State private var selectedProfileId: String? = nil
+    @State private var selectedTab: ChartTab = .daily
+
+    enum ChartTab: String, CaseIterable {
+        case hourly = "Hourly"
+        case daily = "Daily"
+        case monthly = "Monthly"
+    }
 
     var body: some View {
+        HStack(spacing: 0) {
+            sidebar
+            Divider()
+            detailPane
+        }
+        .frame(minWidth: 560, minHeight: 420)
+        .onAppear { loadData() }
+    }
+
+    // MARK: - Sidebar
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Accounts")
+                .font(.headline)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+
+            Divider()
+
+            sidebarRow(
+                title: "All Accounts",
+                tokens: allTodayTotal,
+                isActive: false,
+                isSelected: selectedProfileId == nil,
+                onTap: { selectedProfileId = nil }
+            )
+
+            Divider()
+
+            ForEach(appState.profiles) { profile in
+                let todayKey = UsageTracker.todayString()
+                let todayTokens = profileUsages[profile.id]?.daily[todayKey] ?? 0
+                sidebarRow(
+                    title: profile.id,
+                    tokens: todayTokens,
+                    isActive: profile.id == appState.activeProfile?.id,
+                    isSelected: selectedProfileId == profile.id,
+                    onTap: { selectedProfileId = profile.id }
+                )
+            }
+
+            Spacer()
+        }
+        .frame(width: 190)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private func sidebarRow(title: String, tokens: Int, isActive: Bool, isSelected: Bool, onTap: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(isActive ? Color.green : Color.clear)
+                .frame(width: 6, height: 6)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.bold())
+                    .lineLimit(1)
+                Text(formatTokens(tokens) + " today")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+        .contentShape(Rectangle())
+        .onTapGesture { onTap() }
+    }
+
+    // MARK: - Detail Pane
+
+    private var detailPane: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                // MARK: - Profile Selector (horizontal)
-                profileSelector
-
-                // MARK: - Filter banner
-                if let profileId = selectedProfileId,
-                   let profile = appState.profiles.first(where: { $0.id == profileId }) {
-                    HStack {
-                        Text("Showing: \(profile.id)")
-                            .font(.subheadline.bold())
-                            .foregroundColor(.orange)
-                        Spacer()
-                        Button(action: { selectedProfileId = nil }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.orange.opacity(0.1))
-                    .cornerRadius(8)
-                }
-
-                // MARK: - Stats Cards
-                statsCards
-
-                // MARK: - Heatmap
-                HeatmapView(dailyUsage: filteredDailyUsage)
-                    .padding()
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .cornerRadius(12)
-
-                // MARK: - Model Breakdown
-                ModelBreakdownView(breakdown: filteredBreakdown)
-                    .padding()
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .cornerRadius(12)
-
-                // MARK: - Token Status
-                tokenStatus
-
-                // MARK: - Last refresh
-                if let lastRefresh = appState.lastRefreshTime {
-                    HStack {
-                        Image(systemName: "arrow.clockwise")
-                        Text("Last refresh: \(lastRefresh, style: .relative) ago")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+            VStack(spacing: 16) {
+                if let profileId = selectedProfileId {
+                    profileDetail(profileId: profileId)
+                } else {
+                    globalDetail
                 }
             }
             .padding()
         }
-        .frame(minWidth: 600, minHeight: 500)
-        .onAppear { loadData() }
     }
 
-    // MARK: - Profile Selector
+    // MARK: - Global Detail
 
-    private var profileSelector: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                ForEach(appState.profiles) { profile in
-                    ProfileCardView(
-                        profile: profile,
-                        isActive: profile.id == appState.activeProfile?.id,
-                        usage: profileUsages[profile.id],
-                        onSwitch: { appState.switchProfile(to: profile.id) },
-                        isSelected: profile.id == selectedProfileId,
-                        onSelect: {
-                            selectedProfileId = selectedProfileId == profile.id ? nil : profile.id
-                        },
-                        compact: true
+    private var globalDetail: some View {
+        VStack(spacing: 16) {
+            HStack(spacing: 12) {
+                statCard(title: "Today", value: formatTokens(allTodayTotal))
+                statCard(title: "All Time", value: formatTokens(allTimeTotal))
+            }
+            chartSection
+        }
+    }
+
+    // MARK: - Profile Detail
+
+    @ViewBuilder
+    private func profileDetail(profileId: String) -> some View {
+        let usage = profileUsages[profileId]
+        let todayKey = UsageTracker.todayString()
+        let todayTokens = usage?.daily[todayKey] ?? 0
+        let totalTokens = usage?.total ?? 0
+
+        VStack(spacing: 16) {
+            HStack(spacing: 12) {
+                statCard(title: "Today", value: formatTokens(todayTokens))
+                statCard(title: "Total", value: formatTokens(totalTokens))
+            }
+
+            chartSection
+
+            if let profile = appState.profiles.first(where: { $0.id == profileId }),
+               let cred = profile.credential {
+                HStack {
+                    Circle()
+                        .fill(tokenColor(cred))
+                        .frame(width: 8, height: 8)
+                    Text("Token expires in \(String(format: "%.1f", cred.remainingHours))h")
+                        .font(.subheadline)
+                    Spacer()
+                    if profile.id != appState.activeProfile?.id {
+                        Button("Switch") {
+                            appState.switchProfile(to: profileId)
+                        }
+                        .font(.caption)
+                    }
+                }
+                .padding()
+                .background(Color(nsColor: .windowBackgroundColor))
+                .cornerRadius(12)
+            }
+        }
+    }
+
+    // MARK: - Chart Section (tabbed)
+
+    private var chartSection: some View {
+        VStack(spacing: 0) {
+            Picker("", selection: $selectedTab) {
+                ForEach(ChartTab.allCases, id: \.self) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.bottom, 12)
+
+            Group {
+                switch selectedTab {
+                case .hourly:
+                    TokenBarChart(
+                        title: "By Hour — Today",
+                        entries: hourlyData.filter { $0.tokens > 0 }
+                    )
+                case .daily:
+                    TokenBarChart(
+                        title: "By Day — Last 7",
+                        entries: dailyData.filter { $0.tokens > 0 }
+                    )
+                case .monthly:
+                    TokenBarChart(
+                        title: "By Month",
+                        entries: monthlyData.filter { $0.tokens > 0 }
                     )
                 }
             }
-            .padding(.horizontal, 2)
-            .padding(.vertical, 4)
+            .padding()
+            .background(Color(nsColor: .windowBackgroundColor))
+            .cornerRadius(12)
         }
     }
 
-    // MARK: - Stats Cards
-
-    private var statsCards: some View {
-        HStack(spacing: 12) {
-            statCard(title: "Today", value: displayTodayTotal)
-            statCard(title: "This Week", value: displayWeeklyTotal)
-            statCard(title: "This Month", value: displayMonthlyTotal)
-        }
-    }
+    // MARK: - Stat Card
 
     private func statCard(title: String, value: String) -> some View {
         VStack(spacing: 6) {
@@ -117,107 +205,53 @@ struct DashboardView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Color(nsColor: .windowBackgroundColor))
         .cornerRadius(12)
     }
 
-    // MARK: - Token Status
+    // MARK: - Computed Totals
 
-    private var tokenStatus: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Token Status")
-                .font(.headline)
-
-            ForEach(appState.profiles) { profile in
-                if let cred = profile.credential {
-                    HStack {
-                        Circle()
-                            .fill(tokenColor(cred))
-                            .frame(width: 8, height: 8)
-                        Text(profile.id)
-                            .font(.subheadline)
-                        Spacer()
-                        Text(String(format: "%.1fh remaining", cred.remainingHours))
-                            .font(.subheadline.monospacedDigit())
-                            .foregroundColor(tokenColor(cred))
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-        }
-        .padding()
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(12)
+    private var allTodayTotal: Int {
+        let todayKey = UsageTracker.todayString()
+        return profileUsages.values.compactMap { $0.daily[todayKey] }.reduce(0, +)
     }
 
-    // MARK: - Filtered Data
-
-    private var filteredDailyUsage: [DailyModelTokens] {
-        if let profileId = selectedProfileId {
-            return appState.usageTracker.profileDailyUsage(profileId: profileId)
-        }
-        return dailyUsage
+    private var allTimeTotal: Int {
+        profileUsages.values.map(\.total).reduce(0, +)
     }
 
-    private var filteredBreakdown: [String: Int] {
-        if let profileId = selectedProfileId {
-            // Build breakdown from profile's daily usage
-            var total: [String: Int] = [:]
-            for day in appState.usageTracker.profileDailyUsage(profileId: profileId) {
-                for (model, tokens) in day.tokensByModel {
-                    total[model, default: 0] += tokens
-                }
-            }
-            return total
-        }
-        return overallBreakdown
-    }
+    // MARK: - Load Data
 
-    private var displayTodayTotal: String {
-        if let profileId = selectedProfileId,
-           let usage = profileUsages[profileId] {
-            let todayKey = UsageTracker.todayString()
-            return formatTokens(usage.daily[todayKey] ?? 0)
-        }
-        return formatTokens(todayTotal)
-    }
+    private func loadData() {
+        profileUsages = appState.usageTracker.loadProfileUsages()
 
-    private var displayWeeklyTotal: String {
-        if let profileId = selectedProfileId {
-            let days = appState.usageTracker.profileDailyUsage(profileId: profileId)
-            let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
-            let total = days.filter { entry in
-                guard let date = UsageTracker.parseDate(entry.date) else { return false }
-                return date >= cutoff
-            }.reduce(0) { $0 + $1.totalTokens }
-            return formatTokens(total)
+        // Hourly: today, hours 0-23
+        let rawHourly = appState.usageTracker.realtimeHourlyToday()
+        hourlyData = (0..<24).compactMap { h in
+            let t = rawHourly[h] ?? 0
+            guard t > 0 else { return nil }
+            return (label: String(format: "%02d:00", h), tokens: t)
         }
-        return formatTokens(weeklyTotal)
-    }
 
-    private var displayMonthlyTotal: String {
-        if let profileId = selectedProfileId {
-            let days = appState.usageTracker.profileDailyUsage(profileId: profileId)
-            let cutoff = Calendar.current.date(byAdding: .month, value: -1, to: Date())!
-            let total = days.filter { entry in
-                guard let date = UsageTracker.parseDate(entry.date) else { return false }
-                return date >= cutoff
-            }.reduce(0) { $0 + $1.totalTokens }
-            return formatTokens(total)
+        // Daily: last 7 days
+        let rawDaily = appState.usageTracker.realtimeDailyUsage(lastDays: 7)
+        let calendar = Calendar.current
+        dailyData = (0..<7).map { offset -> (label: String, tokens: Int) in
+            let date = calendar.date(byAdding: .day, value: -(6 - offset), to: Date())!
+            let dateStr = UsageTracker.dateToString(date)
+            let parts = dateStr.split(separator: "-")
+            let label = parts.count == 3 ? "\(parts[1])/\(parts[2])" : dateStr
+            return (label: label, tokens: rawDaily[dateStr] ?? 0)
         }
-        return formatTokens(monthlyTotal)
+
+        // Monthly: all available
+        let rawMonthly = appState.usageTracker.realtimeMonthlyUsage()
+        monthlyData = rawMonthly
+            .map { (label: $0.key, tokens: $0.value) }
+            .sorted { $0.label < $1.label }
     }
 
     // MARK: - Helpers
-
-    private func loadData() {
-        dailyUsage = (try? appState.usageTracker.parseDailyUsage()) ?? []
-        overallBreakdown = (try? appState.usageTracker.modelBreakdown()) ?? [:]
-        todayTotal = (try? appState.usageTracker.todayUsage()) ?? 0
-        weeklyTotal = (try? appState.usageTracker.weeklySummary()) ?? 0
-        monthlyTotal = (try? appState.usageTracker.monthlySummary()) ?? 0
-        profileUsages = appState.usageTracker.loadProfileUsages()
-    }
 
     private func tokenColor(_ cred: OAuthCredential) -> Color {
         if cred.isExpired { return .red }

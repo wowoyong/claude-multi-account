@@ -12,15 +12,16 @@ struct ModelBreakdownView: View {
                 Text("No data")
                     .foregroundColor(.secondary)
             } else {
-                // Horizontal segmented bar using GeometryReader
+                // Horizontal segmented bar
                 GeometryReader { geo in
                     HStack(spacing: 2) {
                         ForEach(pieData, id: \.model) { entry in
                             Rectangle()
                                 .fill(modelColor(entry.model))
-                                .frame(width: max(geo.size.width * CGFloat(entry.percentage) / 100, 2))
+                                .frame(width: max(geo.size.width * CGFloat(entry.percentage) / 100, 2), height: 24)
                         }
                     }
+                    .frame(width: geo.size.width, height: 24)
                 }
                 .frame(height: 24)
                 .cornerRadius(12)
