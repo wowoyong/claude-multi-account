@@ -7,12 +7,25 @@ public struct ProfileMeta: Codable, Equatable {
     public var scopes: [String]
     public var savedAt: Date
 
-    public init(subscriptionType: String, rateLimitTier: String, email: String, scopes: [String], savedAt: Date) {
+    public init(subscriptionType: String, rateLimitTier: String, email: String, scopes: [String] = [], savedAt: Date) {
         self.subscriptionType = subscriptionType
         self.rateLimitTier = rateLimitTier
         self.email = email
         self.scopes = scopes
         self.savedAt = savedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case subscriptionType, rateLimitTier, email, scopes, savedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        subscriptionType = try container.decode(String.self, forKey: .subscriptionType)
+        rateLimitTier = try container.decode(String.self, forKey: .rateLimitTier)
+        email = try container.decodeIfPresent(String.self, forKey: .email) ?? ""
+        scopes = try container.decodeIfPresent([String].self, forKey: .scopes) ?? []
+        savedAt = try container.decode(Date.self, forKey: .savedAt)
     }
 }
 

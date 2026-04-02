@@ -3,6 +3,7 @@ import SwiftUI
 struct MenuBarView: View {
     @ObservedObject var appState: AppState
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -76,7 +77,15 @@ struct MenuBarView: View {
             .padding(.vertical, 4)
             .buttonStyle(.plain)
 
-            Button(action: { openWindow(id: "dashboard") }) {
+            Button(action: {
+                NSApplication.shared.setActivationPolicy(.regular)
+                openWindow(id: "dashboard")
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                // Revert to accessory after a delay so dock icon goes away
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    NSApplication.shared.setActivationPolicy(.accessory)
+                }
+            }) {
                 Label("Open Dashboard", systemImage: "chart.bar")
             }
             .padding(.horizontal, 12)
