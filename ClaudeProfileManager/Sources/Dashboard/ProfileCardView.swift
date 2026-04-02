@@ -3,6 +3,7 @@ import SwiftUI
 struct ProfileCardView: View {
     let profile: Profile
     let isActive: Bool
+    var usage: ProfileUsage?
     let onSwitch: () -> Void
 
     var body: some View {
@@ -51,6 +52,29 @@ struct ProfileCardView: View {
                 }
             }
 
+            // Per-profile usage
+            if let usage = usage {
+                Divider()
+                VStack(alignment: .leading, spacing: 2) {
+                    let todayKey = UsageTracker.todayString()
+                    let todayTokens = usage.daily[todayKey] ?? 0
+                    HStack {
+                        Text("Today:")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text(formatTokens(todayTokens))
+                            .font(.caption2.monospacedDigit().bold())
+                    }
+                    HStack {
+                        Text("Total:")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text(formatTokens(usage.total))
+                            .font(.caption2.monospacedDigit().bold())
+                    }
+                }
+            }
+
             if !isActive {
                 Button("Switch") { onSwitch() }
                     .font(.caption)
@@ -69,5 +93,11 @@ struct ProfileCardView: View {
         if cred.isExpired { return .red }
         if cred.isExpiringSoon() { return .orange }
         return .green
+    }
+
+    private func formatTokens(_ n: Int) -> String {
+        if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
+        if n >= 1_000 { return String(format: "%.1fK", Double(n) / 1_000) }
+        return "\(n)"
     }
 }

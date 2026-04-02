@@ -3,9 +3,10 @@ import SwiftUI
 struct DashboardView: View {
     @ObservedObject var appState: AppState
     @State private var dailyUsage: [DailyModelTokens] = []
-    @State private var todayBreakdown: [String: Int] = [:]
+    @State private var overallBreakdown: [String: Int] = [:]
     @State private var weeklyTotal = 0
-    @State private var monthlyTotal = 0
+    @State private var totalAll = 0
+    @State private var profileUsages: UsageDatabase = [:]
 
     var body: some View {
         HSplitView {
@@ -20,13 +21,14 @@ struct DashboardView: View {
                         ProfileCardView(
                             profile: profile,
                             isActive: profile.id == appState.activeProfile?.id,
+                            usage: profileUsages[profile.id],
                             onSwitch: { appState.switchProfile(to: profile.id) }
                         )
                     }
                 }
                 .padding()
             }
-            .frame(minWidth: 200, maxWidth: 250)
+            .frame(minWidth: 220, maxWidth: 280)
 
             // Right: Charts
             ScrollView {
@@ -34,10 +36,10 @@ struct DashboardView: View {
                     UsageChartView(dailyUsage: dailyUsage)
 
                     HStack(alignment: .top, spacing: 20) {
-                        ModelBreakdownView(breakdown: todayBreakdown)
+                        ModelBreakdownView(breakdown: overallBreakdown)
                             .frame(maxWidth: .infinity)
 
-                        // Weekly/Monthly summary
+                        // Summary
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Summary")
                                 .font(.headline)
@@ -51,10 +53,10 @@ struct DashboardView: View {
                             }
 
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("This Month")
+                                Text("All Time")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
-                                Text(formatTokens(monthlyTotal))
+                                Text(formatTokens(totalAll))
                                     .font(.title2.bold().monospacedDigit())
                             }
                         }
@@ -74,17 +76,17 @@ struct DashboardView: View {
                 .padding()
             }
         }
-        .frame(minWidth: 700, minHeight: 450)
+        .frame(minWidth: 750, minHeight: 480)
         .onAppear { loadData() }
     }
 
     private func loadData() {
         dailyUsage = (try? appState.usageTracker.parseDailyUsage()) ?? []
-        todayBreakdown = (try? appState.usageTracker.modelBreakdown(
-            forDate: UsageTracker.todayString()
-        )) ?? [:]
+        // Overall model breakdown (all time, not just today)
+        overallBreakdown = (try? appState.usageTracker.modelBreakdown()) ?? [:]
         weeklyTotal = (try? appState.usageTracker.weeklySummary()) ?? 0
-        monthlyTotal = (try? appState.usageTracker.monthlySummary()) ?? 0
+        totalAll = (try? appState.usageTracker.totalSummary()) ?? 0
+        profileUsages = appState.usageTracker.loadProfileUsages()
     }
 
     private func formatTokens(_ n: Int) -> String {

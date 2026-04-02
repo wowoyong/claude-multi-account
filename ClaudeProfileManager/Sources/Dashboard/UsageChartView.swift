@@ -40,12 +40,21 @@ struct UsageChartView: View {
         return recent.flatMap { day in
             day.tokensByModel.map { model, tokens in
                 ChartEntry(
-                    date: day.date,
+                    date: Self.shortDate(day.date),
                     model: modelShortName(model),
                     tokens: tokens
                 )
             }
         }
+    }
+
+    /// "2026-01-15" → "1/15"
+    private static func shortDate(_ dateStr: String) -> String {
+        let parts = dateStr.split(separator: "-")
+        guard parts.count == 3,
+              let month = Int(parts[1]),
+              let day = Int(parts[2]) else { return dateStr }
+        return "\(month)/\(day)"
     }
 
     private func modelShortName(_ model: String) -> String {

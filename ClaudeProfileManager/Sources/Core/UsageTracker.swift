@@ -22,9 +22,19 @@ public final class UsageTracker {
         return stats.dailyModelTokens
     }
 
-    public func modelBreakdown(forDate date: String) throws -> [String: Int] {
+    public func modelBreakdown(forDate date: String? = nil) throws -> [String: Int] {
         let daily = try parseDailyUsage()
-        return daily.first(where: { $0.date == date })?.tokensByModel ?? [:]
+        if let date = date, let entry = daily.first(where: { $0.date == date }) {
+            return entry.tokensByModel
+        }
+        // Fallback: aggregate all data for overall breakdown
+        var total: [String: Int] = [:]
+        for day in daily {
+            for (model, tokens) in day.tokensByModel {
+                total[model, default: 0] += tokens
+            }
+        }
+        return total
     }
 
     public func todayUsage() throws -> Int {
@@ -53,6 +63,21 @@ public final class UsageTracker {
             guard let date = Self.parseDate(entry.date) else { return false }
             return date >= monthAgo
         }.reduce(0) { $0 + $1.totalTokens }
+    }
+
+    public func totalSummary() throws -> Int {
+        let daily = try parseDailyUsage()
+        return daily.reduce(0) { $0 + $1.totalTokens }
+    }
+
+    /// Load per-profile usage from .usage.json
+    public func loadProfileUsages() -> UsageDatabase {
+        let usagePath = profilesDirectory.appendingPathComponent(".usage.json")
+        guard let data = try? Data(contentsOf: usagePath),
+              let db = try? JSONDecoder().decode(UsageDatabase.self, from: data) else {
+            return [:]
+        }
+        return db
     }
 
     // MARK: - Helpers
