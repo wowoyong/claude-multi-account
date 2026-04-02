@@ -20,7 +20,7 @@ argument-hint: "<command> [name]  (예: list, save work, switch personal, balanc
   └── .usage.json                 # 프로필별 일일 사용량 DB
 ```
 
-활성 인증: `~/.claude/.credentials.json`
+활성 인증: macOS Keychain `Claude Code-credentials`
 사용량 출처: `~/.claude/stats-cache.json` (dailyModelTokens)
 
 ## 명령어 라우팅
@@ -48,7 +48,7 @@ digraph balance {
   check [label="프로필별\n오늘 사용량 확인"];
   compare [label="A: 30만 tokens\nB: 20만 tokens" shape=note];
   select [label="B 선택\n(사용량 적음)"];
-  apply [label="credentials 교체\n→ 새 세션에서 적용"];
+  apply [label="Keychain 교체\n→ 새 세션에서 적용"];
   start -> check -> compare -> select -> apply;
 }
 ```
@@ -64,24 +64,11 @@ bash "$(dirname "$0")/scripts/smart-select.sh"
 1. 모든 프로필의 `.credentials.json` 확인
 2. `.usage.json`에서 프로필별 오늘 토큰 사용량 조회
 3. 만료되지 않은 프로필 중 사용량 최소인 것 선택
-4. 현재 프로필과 다르면 credentials 교체
-
-**수동 전환과 다른 점**: `switch`는 이름으로 지정, `balance`는 사용량 기준 자동 선택.
+4. 현재 프로필과 다르면 Keychain에 credentials 교체
 
 ### 사용량 기록
 
-세션 종료 시 또는 `balance` 호출 시 현재 프로필의 사용량을 `.usage.json`에 기록:
-
-```python
-# stats-cache.json에서 오늘 토큰 추출
-import json, datetime
-stats = json.load(open('~/.claude/stats-cache.json'))
-today = datetime.date.today().isoformat()
-for day in stats.get('dailyModelTokens', []):
-    if day['date'] == today:
-        total = sum(day.get('tokensByModel', {}).values())
-        # .usage.json에 프로필별로 기록
-```
+세션 종료 시 또는 `balance` 호출 시 현재 프로필의 사용량을 `.usage.json`에 기록.
 
 ## 핵심 기능 2: 토큰 키퍼
 
@@ -90,17 +77,22 @@ for day in stats.get('dailyModelTokens', []):
 ### 동작 원리
 
 ```
-OAuth2 Refresh Flow:
-  refreshToken → POST console.anthropic.com/v1/oauth/token
-               → 새 accessToken + refreshToken + expiresAt
+Claude Code 2.x OAuth2 Refresh Flow:
+  POST https://platform.claude.com/v1/oauth/token
+  Body (JSON): {
+    grant_type: "refresh_token",
+    refresh_token: <token>,
+    client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+    scope: "user:inference user:profile user:sessions:claude_code ..."
+  }
+  → 새 access_token + refresh_token + expires_in
 ```
 
-현재 토큰 만료까지: 약 6시간 (확인됨). 4시간마다 갱신하면 안전.
+현재 토큰 만료까지: 약 6시간. 4시간마다 갱신하면 안전.
 
 ### keeper 구현
 
 ```bash
-# 모든 프로필 토큰 상태 확인 + 갱신
 bash "$(dirname "$0")/scripts/token-keeper.sh"
 ```
 
@@ -109,18 +101,14 @@ bash "$(dirname "$0")/scripts/token-keeper.sh"
 ```bash
 SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)/scripts/token-keeper.sh"
 
-# 기존 등록 확인
 if crontab -l 2>/dev/null | grep -q "token-keeper"; then
   echo "이미 등록되어 있습니다."
   crontab -l | grep "token-keeper"
 else
-  # 4시간마다 실행
   (crontab -l 2>/dev/null; echo "0 */4 * * * $SCRIPT_PATH >> $HOME/.claude/profiles/.token-keeper.log 2>&1") | crontab -
   echo "크론 등록 완료: 매 4시간마다 토큰 갱신"
 fi
 ```
-
-주의: OAuth refresh endpoint가 변경될 수 있음. 갱신 실패 시 `/login` 필요.
 
 ## 기본 명령어
 
@@ -130,17 +118,22 @@ fi
 echo "=== Claude Profiles ==="
 echo ""
 
-# 현재 활성 계정
+# 현재 활성 계정 (Keychain에서 읽기)
 python3 -c "
-import json, datetime, time, os
+import json, time, subprocess
 
-cred = json.load(open(os.path.expanduser('~/.claude/.credentials.json')))
-oauth = cred.get('claudeAiOauth', {})
-exp = oauth.get('expiresAt', 0)
-remaining_h = (exp - time.time() * 1000) / 1000 / 3600
-status_icon = '✅' if remaining_h > 6 else ('⚠️' if remaining_h > 0 else '❌')
-print(f\"Active: {oauth.get('subscriptionType','?')} ({oauth.get('rateLimitTier','?')})\")
-print(f\"  Token: {status_icon} {remaining_h:.1f}h remaining\")
+result = subprocess.run(['security', 'find-generic-password', '-s', 'Claude Code-credentials', '-w'],
+                       capture_output=True, text=True)
+if result.returncode != 0:
+    print('Active: (no credentials in Keychain)')
+else:
+    cred = json.loads(result.stdout.strip())
+    oauth = cred.get('claudeAiOauth', {})
+    exp = oauth.get('expiresAt', 0)
+    remaining_h = (exp - time.time() * 1000) / 1000 / 3600
+    status_icon = '✅' if remaining_h > 6 else ('⚠️' if remaining_h > 0 else '❌')
+    print(f\"Active: {oauth.get('subscriptionType','?')} ({oauth.get('rateLimitTier','?')})\")
+    print(f\"  Token: {status_icon} {remaining_h:.1f}h remaining\")
 "
 
 echo ""
@@ -164,7 +157,6 @@ for name in sorted(os.listdir(profiles_dir)):
     if name.startswith('.') or name == '_previous' or not os.path.isfile(cred_path):
         continue
 
-    # 메타 정보
     try:
         meta = json.load(open(meta_path))
         sub = meta.get('subscriptionType', '?')
@@ -173,7 +165,6 @@ for name in sorted(os.listdir(profiles_dir)):
         sub = '?'
         email = ''
 
-    # 토큰 상태
     try:
         cred = json.load(open(cred_path))
         exp = cred.get('claudeAiOauth', {}).get('expiresAt', 0)
@@ -184,7 +175,6 @@ for name in sorted(os.listdir(profiles_dir)):
         tok_status = '❓'
         tok_info = 'unknown'
 
-    # 오늘 사용량
     today_tokens = usage_db.get(name, {}).get('daily', {}).get(today, 0)
     total_tokens = usage_db.get(name, {}).get('total', 0)
 
@@ -200,14 +190,22 @@ NAME="$1"
 PROFILE_DIR="$HOME/.claude/profiles/$NAME"
 mkdir -p "$PROFILE_DIR"
 
-# 현재 인증 복사
-cp ~/.claude/.credentials.json "$PROFILE_DIR/.credentials.json"
-chmod 600 "$PROFILE_DIR/.credentials.json"
-
-# 메타 정보 저장 (이메일 포함)
+# Keychain에서 현재 인증 읽어서 저장
 python3 -c "
 import json, datetime, subprocess
-cred = json.load(open('$HOME/.claude/.credentials.json'))
+
+result = subprocess.run(['security', 'find-generic-password', '-s', 'Claude Code-credentials', '-w'],
+                       capture_output=True, text=True)
+if result.returncode != 0:
+    print('ERROR: Keychain에서 credentials를 읽을 수 없습니다.')
+    exit(1)
+
+cred = json.loads(result.stdout.strip())
+json.dump(cred, open('$PROFILE_DIR/.credentials.json', 'w'), indent=2)
+
+import os
+os.chmod('$PROFILE_DIR/.credentials.json', 0o600)
+
 oauth = cred.get('claudeAiOauth', {})
 
 # claude auth status에서 이메일 가져오기
@@ -255,17 +253,37 @@ elif remaining_h <= 2:
     print(f'WARNING: 토큰 만료 임박 ({remaining_h:.1f}h)')
 " 2>/dev/null
 
-# 현재 사용량 기록 후 백업
-BACKUP_DIR="$HOME/.claude/profiles/_previous"
-mkdir -p "$BACKUP_DIR"
-cp ~/.claude/.credentials.json "$BACKUP_DIR/.credentials.json" 2>/dev/null || true
+# 현재 인증 백업 (Keychain → _previous)
+python3 -c "
+import json, subprocess, os
 
-# 프로필 적용
-cp "$PROFILE_DIR/.credentials.json" ~/.claude/.credentials.json
-chmod 600 ~/.claude/.credentials.json
+result = subprocess.run(['security', 'find-generic-password', '-s', 'Claude Code-credentials', '-w'],
+                       capture_output=True, text=True)
+if result.returncode == 0:
+    backup_dir = os.path.expanduser('~/.claude/profiles/_previous')
+    os.makedirs(backup_dir, exist_ok=True)
+    with open(os.path.join(backup_dir, '.credentials.json'), 'w') as f:
+        f.write(result.stdout.strip())
+    os.chmod(os.path.join(backup_dir, '.credentials.json'), 0o600)
+" 2>/dev/null
 
-echo "Switched to '$NAME'"
-echo "NOTE: 새 세션에서 적용됩니다."
+# 프로필을 Keychain에 적용
+python3 -c "
+import json, subprocess
+
+new_cred = open('$PROFILE_DIR/.credentials.json').read().strip()
+
+# 기존 항목 삭제
+subprocess.run(['security', 'delete-generic-password', '-s', 'Claude Code-credentials'],
+              capture_output=True)
+
+# 새 항목 추가
+subprocess.run(['security', 'add-generic-password', '-s', 'Claude Code-credentials', '-a', '', '-w', new_cred],
+              capture_output=True)
+
+print(\"Switched to '$NAME'\")
+print('NOTE: 새 세션에서 적용됩니다.')
+" 2>/dev/null
 ```
 
 ### status
@@ -273,7 +291,7 @@ echo "NOTE: 새 세션에서 적용됩니다."
 ```bash
 echo "=== Profile Status ==="
 python3 -c "
-import json, os, time, datetime
+import json, os, time, datetime, subprocess
 
 profiles_dir = os.path.expanduser('~/.claude/profiles')
 usage_file = os.path.join(profiles_dir, '.usage.json')
@@ -284,11 +302,16 @@ try:
 except:
     usage_db = {}
 
-# 활성 토큰
-cred = json.load(open(os.path.expanduser('~/.claude/.credentials.json')))
-exp = cred.get('claudeAiOauth', {}).get('expiresAt', 0)
-remaining = (exp - time.time() * 1000) / 1000 / 3600
-print(f'Active token: {remaining:.1f}h remaining')
+# 활성 토큰 (Keychain)
+result = subprocess.run(['security', 'find-generic-password', '-s', 'Claude Code-credentials', '-w'],
+                       capture_output=True, text=True)
+if result.returncode == 0:
+    cred = json.loads(result.stdout.strip())
+    exp = cred.get('claudeAiOauth', {}).get('expiresAt', 0)
+    remaining = (exp - time.time() * 1000) / 1000 / 3600
+    print(f'Active token: {remaining:.1f}h remaining')
+else:
+    print('Active token: (not found in Keychain)')
 print()
 
 # 프로필별 상세

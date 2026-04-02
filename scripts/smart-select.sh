@@ -2,6 +2,8 @@
 # smart-select.sh — 사용량 기반 프로필 자동 선택
 # 세션 시작 시 호출되어 가장 여유 있는 계정의 credentials를 적용
 #
+# Claude Code 2.x: macOS Keychain "Claude Code-credentials"에서 활성 인증 관리
+#
 # Usage: ./smart-select.sh [--dry-run] [--json]
 
 set -euo pipefail
@@ -9,7 +11,7 @@ set -euo pipefail
 CLAUDE_DIR="$HOME/.claude"
 PROFILES_DIR="$CLAUDE_DIR/profiles"
 USAGE_DB="$PROFILES_DIR/.usage.json"
-CREDENTIALS="$CLAUDE_DIR/.credentials.json"
+KEYCHAIN_SERVICE="Claude Code-credentials"
 
 DRY_RUN=false
 JSON_OUTPUT=false
@@ -20,6 +22,18 @@ for arg in "$@"; do
     --json) JSON_OUTPUT=true ;;
   esac
 done
+
+# --- Keychain 헬퍼 ---
+
+read_active_credentials() {
+  security find-generic-password -s "$KEYCHAIN_SERVICE" -w 2>/dev/null
+}
+
+write_active_credentials() {
+  local json_data="$1"
+  security delete-generic-password -s "$KEYCHAIN_SERVICE" 2>/dev/null || true
+  security add-generic-password -s "$KEYCHAIN_SERVICE" -a "" -w "$json_data" 2>/dev/null
+}
 
 # --- 유틸리티 ---
 
@@ -41,7 +55,6 @@ get_profiles() {
   for dir in "$PROFILES_DIR"/*/; do
     local name
     name=$(basename "$dir")
-    # _previous는 백업이므로 제외
     if [ "$name" != "_previous" ] && [ -f "$dir/.credentials.json" ]; then
       profiles+=("$name")
     fi
@@ -57,7 +70,6 @@ init_usage_db() {
   fi
 }
 
-# 현재 활성 프로필의 stats-cache.json에서 오늘 사용량 읽기
 get_today_usage() {
   python3 -c "
 import json, datetime
@@ -82,7 +94,6 @@ except Exception:
 " 2>/dev/null
 }
 
-# 프로필별 누적 사용량 기록
 record_usage() {
   local profile_name="$1"
   local tokens="$2"
@@ -125,14 +136,12 @@ try:
 except Exception:
     db = {}
 
-# 프로필별 오늘 사용량 계산
 candidates = []
 for name in os.listdir(profiles_dir):
     cred_path = os.path.join(profiles_dir, name, '.credentials.json')
-    if name == '_previous' or not os.path.isfile(cred_path):
+    if name == '_previous' or name.startswith('.') or not os.path.isfile(cred_path):
         continue
 
-    # 토큰 만료 확인
     try:
         cred = json.load(open(cred_path))
         expires = cred.get('claudeAiOauth', {}).get('expiresAt', 0)
@@ -141,7 +150,6 @@ for name in os.listdir(profiles_dir):
     except Exception:
         is_expired = True
 
-    # 오늘 사용량
     today_tokens = db.get(name, {}).get('daily', {}).get(today, 0)
     total_tokens = db.get(name, {}).get('total', 0)
 
@@ -152,16 +160,13 @@ for name in os.listdir(profiles_dir):
         'expired': is_expired
     })
 
-# 만료되지 않은 프로필 중 오늘 사용량이 가장 적은 것 선택
 valid = [c for c in candidates if not c['expired']]
 if not valid:
-    # 모두 만료됐으면 전체에서 선택 (갱신 필요 표시)
     valid = candidates
 
 if not valid:
     print('NONE')
 else:
-    # 오늘 사용량 기준 정렬, 같으면 총 사용량 기준
     valid.sort(key=lambda c: (c['todayTokens'], c['totalTokens']))
     best = valid[0]
 
@@ -176,25 +181,30 @@ else:
 " 2>/dev/null
 }
 
-# --- 현재 활성 프로필 식별 ---
+# --- 현재 활성 프로필 식별 (Keychain 기반) ---
 
 identify_current_profile() {
-  python3 -c "
+  local active_json
+  active_json=$(read_active_credentials)
+  if [ -z "$active_json" ]; then
+    echo "unknown"
+    return
+  fi
+
+  ACTIVE_JSON="$active_json" python3 -c "
 import json, os
 
-current_cred = '$CREDENTIALS'
+current = json.loads(os.environ['ACTIVE_JSON'])
+current_token = current.get('claudeAiOauth', {}).get('refreshToken', '')
 profiles_dir = '$PROFILES_DIR'
 
-try:
-    current = json.load(open(current_cred))
-    current_token = current.get('claudeAiOauth', {}).get('refreshToken', '')
-except Exception:
+if not current_token:
     print('unknown')
     exit()
 
-for name in os.listdir(profiles_dir):
+for name in sorted(os.listdir(profiles_dir)):
     cred_path = os.path.join(profiles_dir, name, '.credentials.json')
-    if name == '_previous' or not os.path.isfile(cred_path):
+    if name == '_previous' or name.startswith('.') or not os.path.isfile(cred_path):
         continue
     try:
         profile = json.load(open(cred_path))
@@ -222,7 +232,6 @@ main() {
     exit 0
   fi
 
-  # 현재 프로필의 오늘 사용량 기록
   current=$(identify_current_profile)
   if [ "$current" != "unknown" ]; then
     today_usage=$(get_today_usage)
@@ -230,7 +239,6 @@ main() {
     log "현재 프로필: $current (오늘 ${today_usage} tokens)"
   fi
 
-  # 최적 프로필 선택
   best=$(select_best_profile)
 
   if [ "$best" = "NONE" ]; then
@@ -253,13 +261,20 @@ main() {
   # 현재 인증 백업
   BACKUP_DIR="$PROFILES_DIR/_previous"
   mkdir -p "$BACKUP_DIR"
-  cp "$CREDENTIALS" "$BACKUP_DIR/.credentials.json" 2>/dev/null || true
+  local current_json
+  current_json=$(read_active_credentials)
+  if [ -n "$current_json" ]; then
+    echo "$current_json" > "$BACKUP_DIR/.credentials.json"
+    chmod 600 "$BACKUP_DIR/.credentials.json"
+  fi
 
-  # 프로필 적용
-  cp "$PROFILES_DIR/$best/.credentials.json" "$CREDENTIALS"
-  chmod 600 "$CREDENTIALS"
+  # 프로필 적용 (Keychain에 쓰기)
+  local new_cred
+  new_cred=$(cat "$PROFILES_DIR/$best/.credentials.json")
+  write_active_credentials "$new_cred"
 
   log "전환 완료: $current → $best"
+  log "NOTE: 새 세션에서 적용됩니다."
 }
 
 main
