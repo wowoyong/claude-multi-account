@@ -197,6 +197,15 @@ public final class UsageTracker {
         }
     }
 
+    /// Filter daily usage to dates when a specific profile was active
+    public func profileDailyUsage(profileId: String) -> [DailyModelTokens] {
+        let usages = loadProfileUsages()
+        guard let profileUsage = usages[profileId] else { return [] }
+        let activeDates = Set(profileUsage.daily.keys)
+        guard let allDaily = try? parseDailyUsage() else { return [] }
+        return allDaily.filter { activeDates.contains($0.date) }
+    }
+
     // MARK: - Helpers
 
     public static func todayString() -> String {

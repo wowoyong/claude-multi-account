@@ -1,5 +1,4 @@
 import SwiftUI
-import Charts
 
 struct ModelBreakdownView: View {
     let breakdown: [String: Int]
@@ -13,22 +12,18 @@ struct ModelBreakdownView: View {
                 Text("No data")
                     .foregroundColor(.secondary)
             } else {
-                Chart(pieData, id: \.model) { entry in
-                    BarMark(
-                        x: .value("Tokens", entry.tokens)
-                    )
-                    .foregroundStyle(by: .value("Model", entry.model))
+                // Horizontal segmented bar using GeometryReader
+                GeometryReader { geo in
+                    HStack(spacing: 2) {
+                        ForEach(pieData, id: \.model) { entry in
+                            Rectangle()
+                                .fill(modelColor(entry.model))
+                                .frame(width: max(geo.size.width * CGFloat(entry.percentage) / 100, 2))
+                        }
+                    }
                 }
-                .chartForegroundStyleScale([
-                    "Opus": Color.purple,
-                    "Sonnet": Color.blue,
-                    "Haiku": Color.gray,
-                    "Other": Color.secondary,
-                ])
-                .chartPlotStyle { plot in
-                    plot.frame(height: 30)
-                }
-                .frame(height: 50)
+                .frame(height: 24)
+                .cornerRadius(12)
 
                 // Legend with percentages
                 ForEach(pieData, id: \.model) { entry in

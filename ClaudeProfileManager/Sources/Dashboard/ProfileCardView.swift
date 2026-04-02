@@ -5,6 +5,8 @@ struct ProfileCardView: View {
     let isActive: Bool
     var usage: ProfileUsage?
     let onSwitch: () -> Void
+    var isSelected: Bool = false
+    var onSelect: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -85,8 +87,12 @@ struct ProfileCardView: View {
         .cornerRadius(8)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isActive ? Color.accentColor : Color.gray.opacity(0.3), lineWidth: 1)
+                .stroke(
+                    isSelected ? Color.orange : (isActive ? Color.accentColor : Color.gray.opacity(0.3)),
+                    lineWidth: isSelected ? 2 : 1
+                )
         )
+        .onTapGesture { onSelect?() }
     }
 
     private func tokenColor(_ cred: OAuthCredential) -> Color {

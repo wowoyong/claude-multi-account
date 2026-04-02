@@ -25,6 +25,7 @@ struct DashboardView: View {
 
     @State private var selectedPeriod: ChartPeriod = .all
     @State private var selectedMode: ChartMode = .tokens
+    @State private var selectedProfileId: String? = nil
 
     var body: some View {
         HSplitView {
@@ -40,7 +41,11 @@ struct DashboardView: View {
                             profile: profile,
                             isActive: profile.id == appState.activeProfile?.id,
                             usage: profileUsages[profile.id],
-                            onSwitch: { appState.switchProfile(to: profile.id) }
+                            onSwitch: { appState.switchProfile(to: profile.id) },
+                            isSelected: profile.id == selectedProfileId,
+                            onSelect: {
+                                selectedProfileId = selectedProfileId == profile.id ? nil : profile.id
+                            }
                         )
                     }
                 }
@@ -51,6 +56,35 @@ struct DashboardView: View {
             // Right: Charts
             ScrollView {
                 VStack(spacing: 16) {
+                    // Profile filter banner
+                    if let profileId = selectedProfileId,
+                       let profile = appState.profiles.first(where: { $0.id == profileId }) {
+                        HStack {
+                            Text("Showing: \(profile.id)")
+                                .font(.subheadline.bold())
+                                .foregroundColor(.orange)
+                            Spacer()
+                            Button(action: { selectedProfileId = nil }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(8)
+                    } else {
+                        HStack {
+                            Text("All Accounts")
+                                .font(.subheadline.bold())
+                                .foregroundColor(.secondary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                    }
+
                     // Toggle bar
                     HStack {
                         Picker("Mode", selection: $selectedMode) {
@@ -155,6 +189,18 @@ struct DashboardView: View {
                     "Haiku": Color.gray,
                     "Other": Color.secondary,
                 ])
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .day, count: 7)) { value in
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                let formatter = Self.monthDayFormatter
+                                Text(formatter.string(from: date))
+                            }
+                        }
+                        AxisGridLine()
+                        AxisTick()
+                    }
+                }
                 .frame(height: 220)
             }
         }
@@ -216,6 +262,16 @@ struct DashboardView: View {
                         .foregroundStyle(hour >= 9 && hour <= 18 ? Color.blue : Color.blue.opacity(0.4))
                     }
                 }
+                .chartXAxis {
+                    AxisMarks(values: [
+                        "0:00", "3:00", "6:00", "9:00",
+                        "12:00", "15:00", "18:00", "21:00"
+                    ]) { value in
+                        AxisValueLabel()
+                        AxisGridLine()
+                        AxisTick()
+                    }
+                }
                 .frame(height: 220)
             }
         }
@@ -224,11 +280,29 @@ struct DashboardView: View {
     // MARK: - Helpers
 
     private var filteredDailyUsage: [DailyModelTokens] {
-        filterByPeriod(dailyUsage, dateKeyPath: \.date)
+        let base: [DailyModelTokens]
+        if let profileId = selectedProfileId {
+            base = appState.usageTracker.profileDailyUsage(profileId: profileId)
+        } else {
+            base = dailyUsage
+        }
+        return filterByPeriod(base, dateKeyPath: \.date)
     }
 
     private var filteredDailyActivity: [DailyActivity] {
-        filterByPeriod(dailyActivity, dateKeyPath: \.date)
+        let base: [DailyActivity]
+        if let profileId = selectedProfileId {
+            let usages = appState.usageTracker.loadProfileUsages()
+            if let profileUsage = usages[profileId] {
+                let activeDates = Set(profileUsage.daily.keys)
+                base = dailyActivity.filter { activeDates.contains($0.date) }
+            } else {
+                base = []
+            }
+        } else {
+            base = dailyActivity
+        }
+        return filterByPeriod(base, dateKeyPath: \.date)
     }
 
     private func filterByPeriod<T>(_ items: [T], dateKeyPath: KeyPath<T, String>) -> [T] {
@@ -250,10 +324,17 @@ struct DashboardView: View {
         }
     }
 
+    private static let monthDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "M/d"
+        return f
+    }()
+
     private func tokenChartData(from data: [DailyModelTokens]) -> [ChartEntry] {
         data.flatMap { day in
-            day.tokensByModel.map { model, tokens in
-                ChartEntry(date: shortDate(day.date), model: modelShortName(model), tokens: tokens)
+            day.tokensByModel.compactMap { model, tokens -> ChartEntry? in
+                guard let date = UsageTracker.parseDate(day.date) else { return nil }
+                return ChartEntry(date: date, model: modelShortName(model), tokens: tokens)
             }
         }
     }
@@ -305,7 +386,7 @@ struct DashboardView: View {
 
 private struct ChartEntry: Identifiable {
     let id = UUID()
-    let date: String
+    let date: Date
     let model: String
     let tokens: Int
 }
