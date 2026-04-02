@@ -16,10 +16,21 @@ public final class UsageTracker {
 
     // MARK: - Parse
 
-    public func parseDailyUsage() throws -> [DailyModelTokens] {
+    public func parseStatsCache() throws -> StatsCache {
         let data = try Data(contentsOf: statsCachePath)
-        let stats = try JSONDecoder().decode(StatsCache.self, from: data)
-        return stats.dailyModelTokens
+        return try JSONDecoder().decode(StatsCache.self, from: data)
+    }
+
+    public func parseDailyUsage() throws -> [DailyModelTokens] {
+        return try parseStatsCache().dailyModelTokens
+    }
+
+    public func parseDailyActivity() throws -> [DailyActivity] {
+        return try parseStatsCache().dailyActivity ?? []
+    }
+
+    public func parseHourCounts() throws -> [String: Int] {
+        return try parseStatsCache().hourCounts ?? [:]
     }
 
     public func modelBreakdown(forDate date: String? = nil) throws -> [String: Int] {

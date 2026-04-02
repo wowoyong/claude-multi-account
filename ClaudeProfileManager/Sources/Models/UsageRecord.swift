@@ -15,12 +15,35 @@ public struct DailyModelTokens: Codable {
     }
 }
 
+/// Matches stats-cache.json dailyActivity entry
+public struct DailyActivity: Codable {
+    public let date: String
+    public let messageCount: Int
+    public let sessionCount: Int
+    public let toolCallCount: Int
+
+    public init(date: String, messageCount: Int, sessionCount: Int, toolCallCount: Int) {
+        self.date = date
+        self.messageCount = messageCount
+        self.sessionCount = sessionCount
+        self.toolCallCount = toolCallCount
+    }
+}
+
 /// Matches stats-cache.json top-level
 public struct StatsCache: Codable {
     public let dailyModelTokens: [DailyModelTokens]
+    public let dailyActivity: [DailyActivity]?
+    public let hourCounts: [String: Int]?
+    public let totalSessions: Int?
+    public let totalMessages: Int?
 
-    public init(dailyModelTokens: [DailyModelTokens]) {
+    public init(dailyModelTokens: [DailyModelTokens], dailyActivity: [DailyActivity]? = nil, hourCounts: [String: Int]? = nil, totalSessions: Int? = nil, totalMessages: Int? = nil) {
         self.dailyModelTokens = dailyModelTokens
+        self.dailyActivity = dailyActivity
+        self.hourCounts = hourCounts
+        self.totalSessions = totalSessions
+        self.totalMessages = totalMessages
     }
 }
 
