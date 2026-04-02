@@ -49,9 +49,50 @@ public final class UsageTracker {
     }
 
     public func todayUsage() throws -> Int {
+        // First try stats-cache
         let today = Self.todayString()
         let daily = try parseDailyUsage()
-        return daily.first(where: { $0.date == today })?.totalTokens ?? 0
+        if let entry = daily.first(where: { $0.date == today }), entry.totalTokens > 0 {
+            return entry.totalTokens
+        }
+
+        // Fallback: sum today's individual session token-stats files
+        return todayUsageFromSessionFiles()
+    }
+
+    /// Sum tokens from individual session files modified today
+    public func todayUsageFromSessionFiles() -> Int {
+        let claudeDir = profilesDirectory.deletingLastPathComponent() // ~/.claude/
+        let fm = FileManager.default
+        let today = Self.todayString()
+
+        guard let files = try? fm.contentsOfDirectory(atPath: claudeDir.path) else {
+            print("[UsageTracker] Cannot read \(claudeDir.path)")
+            return 0
+        }
+
+        var total = 0
+        for file in files where file.hasPrefix("token-stats") && file.hasSuffix(".json") {
+            let path = claudeDir.appendingPathComponent(file)
+            guard let attrs = try? fm.attributesOfItem(atPath: path.path),
+                  let modDate = attrs[.modificationDate] as? Date else { continue }
+
+            let modDay = Self.dateToString(modDate)
+            if modDay == today {
+                if let data = try? Data(contentsOf: path),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let tokens = json["totalTokens"] as? Int {
+                    total += tokens
+                }
+            }
+        }
+        return total
+    }
+
+    private static func dateToString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
 
     public func weeklySummary() throws -> Int {
@@ -89,6 +130,71 @@ public final class UsageTracker {
             return [:]
         }
         return db
+    }
+
+    /// Record current stats-cache usage for the active profile
+    public func recordUsage(forProfile profileName: String) {
+        let today = Self.todayString()
+        let todayTokens = (try? todayUsage()) ?? 0
+
+        let usagePath = profilesDirectory.appendingPathComponent(".usage.json")
+        var db = loadProfileUsages()
+
+        if db[profileName] == nil {
+            db[profileName] = ProfileUsage(daily: [:], total: 0, lastUsed: nil)
+        }
+
+        var entry = db[profileName]!
+        entry.daily[today] = todayTokens
+        entry.total = entry.daily.values.reduce(0, +)
+        entry.lastUsed = ISO8601DateFormatter().string(from: Date())
+        db[profileName] = entry
+
+        if let data = try? JSONEncoder().encode(db) {
+            try? data.write(to: usagePath)
+        }
+    }
+
+    /// Record usage for ALL profiles based on stats-cache total allocation
+    /// Since stats-cache is global, we split total proportionally or attribute all to active
+    public func recordAllProfileUsages(activeProfileName: String?, allProfileNames: [String]) {
+        let usagePath = profilesDirectory.appendingPathComponent(".usage.json")
+        var db = loadProfileUsages()
+
+        // Get total tokens from stats-cache by date
+        guard let daily = try? parseDailyUsage() else { return }
+
+        // Initialize missing profiles
+        for name in allProfileNames {
+            if db[name] == nil {
+                db[name] = ProfileUsage(daily: [:], total: 0, lastUsed: nil)
+            }
+        }
+
+        // Attribute today's tokens to active profile
+        let today = Self.todayString()
+        var todayTokens = daily.first(where: { $0.date == today })?.totalTokens ?? 0
+        // Fallback: read from individual session files if stats-cache has no today entry
+        if todayTokens == 0 {
+            todayTokens = todayUsageFromSessionFiles()
+        }
+
+        if let active = activeProfileName {
+            db[active]?.daily[today] = todayTokens
+            db[active]?.lastUsed = ISO8601DateFormatter().string(from: Date())
+        }
+
+        // Recalculate totals
+        for name in allProfileNames {
+            if var entry = db[name] {
+                entry.total = entry.daily.values.reduce(0, +)
+                db[name] = entry
+            }
+        }
+
+        if let data = try? JSONEncoder().encode(db) {
+            try? data.write(to: usagePath)
+        }
     }
 
     // MARK: - Helpers

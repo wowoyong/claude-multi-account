@@ -40,6 +40,13 @@ final class AppState: ObservableObject {
                 }
 
                 activeProfile = try profileManager.identifyActiveProfile()
+
+                // Record usage for active profile
+                usageTracker.recordAllProfileUsages(
+                    activeProfileName: activeProfile?.id,
+                    allProfileNames: loaded.map { $0.id }
+                )
+
                 isLoading = false
             } catch {
                 self.error = error.localizedDescription
@@ -51,6 +58,11 @@ final class AppState: ObservableObject {
     func switchProfile(to profileId: String) {
         Task {
             do {
+                // Snapshot current profile's usage before switching
+                if let current = activeProfile {
+                    usageTracker.recordUsage(forProfile: current.id)
+                }
+
                 try profileManager.switchTo(profileId: profileId)
                 activeProfile = profiles.first(where: { $0.id == profileId })
                 loadProfiles()  // Refresh
