@@ -7,8 +7,63 @@ struct ProfileCardView: View {
     let onSwitch: () -> Void
     var isSelected: Bool = false
     var onSelect: (() -> Void)? = nil
+    var compact: Bool = false
 
     var body: some View {
+        if compact {
+            compactBody
+        } else {
+            fullBody
+        }
+    }
+
+    // MARK: - Compact layout (horizontal profile selector)
+
+    private var compactBody: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                if isActive {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 6, height: 6)
+                }
+                Text(profile.id)
+                    .font(.subheadline.bold())
+                    .lineLimit(1)
+            }
+
+            Text(profile.meta.subscriptionType.uppercased())
+                .font(.caption2.bold())
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(Color.blue.opacity(0.15))
+                .cornerRadius(3)
+
+            if let usage = usage {
+                let todayKey = UsageTracker.todayString()
+                let todayTokens = usage.daily[todayKey] ?? 0
+                Text(formatTokens(todayTokens) + " today")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(isActive ? Color.accentColor.opacity(0.05) : Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(
+                    isSelected ? Color.orange : (isActive ? Color.accentColor : Color.gray.opacity(0.3)),
+                    lineWidth: isSelected ? 2 : 1
+                )
+        )
+        .onTapGesture { onSelect?() }
+    }
+
+    // MARK: - Full layout (original sidebar style)
+
+    private var fullBody: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(profile.id)

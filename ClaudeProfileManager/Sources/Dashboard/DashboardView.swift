@@ -1,392 +1,233 @@
 import SwiftUI
-import Charts
-
-enum ChartPeriod: String, CaseIterable {
-    case week = "7D"
-    case month = "30D"
-    case all = "All"
-}
-
-enum ChartMode: String, CaseIterable {
-    case tokens = "Tokens"
-    case activity = "Activity"
-    case hourly = "Hourly"
-}
 
 struct DashboardView: View {
     @ObservedObject var appState: AppState
     @State private var dailyUsage: [DailyModelTokens] = []
-    @State private var dailyActivity: [DailyActivity] = []
-    @State private var hourCounts: [String: Int] = [:]
     @State private var overallBreakdown: [String: Int] = [:]
+    @State private var todayTotal = 0
     @State private var weeklyTotal = 0
-    @State private var totalAll = 0
+    @State private var monthlyTotal = 0
     @State private var profileUsages: UsageDatabase = [:]
-
-    @State private var selectedPeriod: ChartPeriod = .all
-    @State private var selectedMode: ChartMode = .tokens
     @State private var selectedProfileId: String? = nil
 
     var body: some View {
-        HSplitView {
-            // Left: Profiles
-            ScrollView {
-                VStack(spacing: 8) {
-                    Text("Profiles")
-                        .font(.title2.bold())
-                        .frame(maxWidth: .infinity, alignment: .leading)
+        ScrollView {
+            VStack(spacing: 20) {
+                // MARK: - Profile Selector (horizontal)
+                profileSelector
 
-                    ForEach(appState.profiles) { profile in
-                        ProfileCardView(
-                            profile: profile,
-                            isActive: profile.id == appState.activeProfile?.id,
-                            usage: profileUsages[profile.id],
-                            onSwitch: { appState.switchProfile(to: profile.id) },
-                            isSelected: profile.id == selectedProfileId,
-                            onSelect: {
-                                selectedProfileId = selectedProfileId == profile.id ? nil : profile.id
-                            }
-                        )
-                    }
-                }
-                .padding()
-            }
-            .frame(minWidth: 220, maxWidth: 280)
-
-            // Right: Charts
-            ScrollView {
-                VStack(spacing: 16) {
-                    // Profile filter banner
-                    if let profileId = selectedProfileId,
-                       let profile = appState.profiles.first(where: { $0.id == profileId }) {
-                        HStack {
-                            Text("Showing: \(profile.id)")
-                                .font(.subheadline.bold())
-                                .foregroundColor(.orange)
-                            Spacer()
-                            Button(action: { selectedProfileId = nil }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.orange.opacity(0.1))
-                        .cornerRadius(8)
-                    } else {
-                        HStack {
-                            Text("All Accounts")
-                                .font(.subheadline.bold())
-                                .foregroundColor(.secondary)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                    }
-
-                    // Toggle bar
+                // MARK: - Filter banner
+                if let profileId = selectedProfileId,
+                   let profile = appState.profiles.first(where: { $0.id == profileId }) {
                     HStack {
-                        Picker("Mode", selection: $selectedMode) {
-                            ForEach(ChartMode.allCases, id: \.self) { mode in
-                                Text(mode.rawValue).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(maxWidth: 250)
-
+                        Text("Showing: \(profile.id)")
+                            .font(.subheadline.bold())
+                            .foregroundColor(.orange)
                         Spacer()
-
-                        if selectedMode != .hourly {
-                            Picker("Period", selection: $selectedPeriod) {
-                                ForEach(ChartPeriod.allCases, id: \.self) { period in
-                                    Text(period.rawValue).tag(period)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            .frame(maxWidth: 180)
-                        }
-                    }
-
-                    // Chart
-                    switch selectedMode {
-                    case .tokens:
-                        tokensChart
-                    case .activity:
-                        activityChart
-                    case .hourly:
-                        hourlyChart
-                    }
-
-                    HStack(alignment: .top, spacing: 20) {
-                        ModelBreakdownView(breakdown: overallBreakdown)
-                            .frame(maxWidth: .infinity)
-
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Summary")
-                                .font(.headline)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("This Week")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Text(formatTokens(weeklyTotal))
-                                    .font(.title2.bold().monospacedDigit())
-                            }
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("All Time")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Text(formatTokens(totalAll))
-                                    .font(.title2.bold().monospacedDigit())
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-
-                    if let lastRefresh = appState.lastRefreshTime {
-                        HStack {
-                            Image(systemName: "arrow.clockwise")
-                            Text("Last refresh: \(lastRefresh, style: .relative) ago")
-                                .font(.caption)
+                        Button(action: { selectedProfileId = nil }) {
+                            Image(systemName: "xmark.circle.fill")
                                 .foregroundColor(.secondary)
                         }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(8)
+                }
+
+                // MARK: - Stats Cards
+                statsCards
+
+                // MARK: - Heatmap
+                HeatmapView(dailyUsage: filteredDailyUsage)
+                    .padding()
+                    .background(Color(nsColor: .controlBackgroundColor))
+                    .cornerRadius(12)
+
+                // MARK: - Model Breakdown
+                ModelBreakdownView(breakdown: filteredBreakdown)
+                    .padding()
+                    .background(Color(nsColor: .controlBackgroundColor))
+                    .cornerRadius(12)
+
+                // MARK: - Token Status
+                tokenStatus
+
+                // MARK: - Last refresh
+                if let lastRefresh = appState.lastRefreshTime {
+                    HStack {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Last refresh: \(lastRefresh, style: .relative) ago")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
-                .padding()
             }
+            .padding()
         }
-        .frame(minWidth: 750, minHeight: 500)
+        .frame(minWidth: 600, minHeight: 500)
         .onAppear { loadData() }
     }
 
-    // MARK: - Token Chart
+    // MARK: - Profile Selector
 
-    private var tokensChart: some View {
-        VStack(alignment: .leading) {
-            Text("Daily Token Usage (Estimated)")
-                .font(.headline)
-
-            let filtered = filteredDailyUsage
-            if filtered.isEmpty {
-                Text("No data for this period")
-                    .foregroundColor(.secondary)
-                    .frame(height: 200)
-            } else {
-                Chart {
-                    ForEach(tokenChartData(from: filtered), id: \.id) { entry in
-                        BarMark(
-                            x: .value("Date", entry.date),
-                            y: .value("Tokens", entry.tokens)
-                        )
-                        .foregroundStyle(by: .value("Model", entry.model))
-                    }
+    private var profileSelector: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(appState.profiles) { profile in
+                    ProfileCardView(
+                        profile: profile,
+                        isActive: profile.id == appState.activeProfile?.id,
+                        usage: profileUsages[profile.id],
+                        onSwitch: { appState.switchProfile(to: profile.id) },
+                        isSelected: profile.id == selectedProfileId,
+                        onSelect: {
+                            selectedProfileId = selectedProfileId == profile.id ? nil : profile.id
+                        },
+                        compact: true
+                    )
                 }
-                .chartForegroundStyleScale([
-                    "Opus": Color.purple,
-                    "Sonnet": Color.blue,
-                    "Haiku": Color.gray,
-                    "Other": Color.secondary,
-                ])
-                .chartXAxis {
-                    AxisMarks(values: .stride(by: .day, count: 7)) { value in
-                        AxisValueLabel {
-                            if let date = value.as(Date.self) {
-                                let formatter = Self.monthDayFormatter
-                                Text(formatter.string(from: date))
-                            }
-                        }
-                        AxisGridLine()
-                        AxisTick()
-                    }
-                }
-                .frame(height: 220)
             }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 4)
         }
     }
 
-    // MARK: - Activity Chart
+    // MARK: - Stats Cards
 
-    private var activityChart: some View {
-        VStack(alignment: .leading) {
-            Text("Daily Activity")
-                .font(.headline)
+    private var statsCards: some View {
+        HStack(spacing: 12) {
+            statCard(title: "Today", value: displayTodayTotal)
+            statCard(title: "This Week", value: displayWeeklyTotal)
+            statCard(title: "This Month", value: displayMonthlyTotal)
+        }
+    }
 
-            let filtered = filteredDailyActivity
-            if filtered.isEmpty {
-                Text("No activity data for this period")
-                    .foregroundColor(.secondary)
-                    .frame(height: 200)
-            } else {
-                Chart {
-                    ForEach(filtered, id: \.date) { day in
-                        BarMark(
-                            x: .value("Date", shortDate(day.date)),
-                            y: .value("Messages", day.messageCount)
-                        )
-                        .foregroundStyle(Color.blue)
-                    }
-                }
-                .frame(height: 220)
-
-                HStack(spacing: 20) {
-                    statBadge("Sessions", value: filtered.reduce(0) { $0 + $1.sessionCount })
-                    statBadge("Messages", value: filtered.reduce(0) { $0 + $1.messageCount })
-                    statBadge("Tool Calls", value: filtered.reduce(0) { $0 + $1.toolCallCount })
-                }
+    private func statCard(title: String, value: String) -> some View {
+        VStack(spacing: 6) {
+            Text(title)
                 .font(.caption)
-            }
+                .foregroundColor(.secondary)
+            Text(value)
+                .font(.title2.bold().monospacedDigit())
+            Text("tokens")
+                .font(.caption2)
+                .foregroundColor(.secondary)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(12)
     }
 
-    // MARK: - Hourly Chart
+    // MARK: - Token Status
 
-    private var hourlyChart: some View {
-        VStack(alignment: .leading) {
-            Text("Activity by Hour of Day")
+    private var tokenStatus: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Token Status")
                 .font(.headline)
 
-            if hourCounts.isEmpty {
-                Text("No hourly data")
-                    .foregroundColor(.secondary)
-                    .frame(height: 200)
-            } else {
-                Chart {
-                    ForEach(0..<24, id: \.self) { hour in
-                        let count = hourCounts[String(hour)] ?? 0
-                        BarMark(
-                            x: .value("Hour", "\(hour):00"),
-                            y: .value("Sessions", count)
-                        )
-                        .foregroundStyle(hour >= 9 && hour <= 18 ? Color.blue : Color.blue.opacity(0.4))
+            ForEach(appState.profiles) { profile in
+                if let cred = profile.credential {
+                    HStack {
+                        Circle()
+                            .fill(tokenColor(cred))
+                            .frame(width: 8, height: 8)
+                        Text(profile.id)
+                            .font(.subheadline)
+                        Spacer()
+                        Text(String(format: "%.1fh remaining", cred.remainingHours))
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundColor(tokenColor(cred))
                     }
+                    .padding(.vertical, 4)
                 }
-                .chartXAxis {
-                    AxisMarks(values: [
-                        "0:00", "3:00", "6:00", "9:00",
-                        "12:00", "15:00", "18:00", "21:00"
-                    ]) { value in
-                        AxisValueLabel()
-                        AxisGridLine()
-                        AxisTick()
-                    }
-                }
-                .frame(height: 220)
             }
         }
+        .padding()
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(12)
+    }
+
+    // MARK: - Filtered Data
+
+    private var filteredDailyUsage: [DailyModelTokens] {
+        if let profileId = selectedProfileId {
+            return appState.usageTracker.profileDailyUsage(profileId: profileId)
+        }
+        return dailyUsage
+    }
+
+    private var filteredBreakdown: [String: Int] {
+        if let profileId = selectedProfileId {
+            // Build breakdown from profile's daily usage
+            var total: [String: Int] = [:]
+            for day in appState.usageTracker.profileDailyUsage(profileId: profileId) {
+                for (model, tokens) in day.tokensByModel {
+                    total[model, default: 0] += tokens
+                }
+            }
+            return total
+        }
+        return overallBreakdown
+    }
+
+    private var displayTodayTotal: String {
+        if let profileId = selectedProfileId,
+           let usage = profileUsages[profileId] {
+            let todayKey = UsageTracker.todayString()
+            return formatTokens(usage.daily[todayKey] ?? 0)
+        }
+        return formatTokens(todayTotal)
+    }
+
+    private var displayWeeklyTotal: String {
+        if let profileId = selectedProfileId {
+            let days = appState.usageTracker.profileDailyUsage(profileId: profileId)
+            let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
+            let total = days.filter { entry in
+                guard let date = UsageTracker.parseDate(entry.date) else { return false }
+                return date >= cutoff
+            }.reduce(0) { $0 + $1.totalTokens }
+            return formatTokens(total)
+        }
+        return formatTokens(weeklyTotal)
+    }
+
+    private var displayMonthlyTotal: String {
+        if let profileId = selectedProfileId {
+            let days = appState.usageTracker.profileDailyUsage(profileId: profileId)
+            let cutoff = Calendar.current.date(byAdding: .month, value: -1, to: Date())!
+            let total = days.filter { entry in
+                guard let date = UsageTracker.parseDate(entry.date) else { return false }
+                return date >= cutoff
+            }.reduce(0) { $0 + $1.totalTokens }
+            return formatTokens(total)
+        }
+        return formatTokens(monthlyTotal)
     }
 
     // MARK: - Helpers
 
-    private var filteredDailyUsage: [DailyModelTokens] {
-        let base: [DailyModelTokens]
-        if let profileId = selectedProfileId {
-            base = appState.usageTracker.profileDailyUsage(profileId: profileId)
-        } else {
-            base = dailyUsage
-        }
-        return filterByPeriod(base, dateKeyPath: \.date)
-    }
-
-    private var filteredDailyActivity: [DailyActivity] {
-        let base: [DailyActivity]
-        if let profileId = selectedProfileId {
-            let usages = appState.usageTracker.loadProfileUsages()
-            if let profileUsage = usages[profileId] {
-                let activeDates = Set(profileUsage.daily.keys)
-                base = dailyActivity.filter { activeDates.contains($0.date) }
-            } else {
-                base = []
-            }
-        } else {
-            base = dailyActivity
-        }
-        return filterByPeriod(base, dateKeyPath: \.date)
-    }
-
-    private func filterByPeriod<T>(_ items: [T], dateKeyPath: KeyPath<T, String>) -> [T] {
-        switch selectedPeriod {
-        case .all:
-            return items
-        case .week:
-            let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
-            return items.filter { item in
-                guard let date = UsageTracker.parseDate(item[keyPath: dateKeyPath]) else { return false }
-                return date >= cutoff
-            }
-        case .month:
-            let cutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
-            return items.filter { item in
-                guard let date = UsageTracker.parseDate(item[keyPath: dateKeyPath]) else { return false }
-                return date >= cutoff
-            }
-        }
-    }
-
-    private static let monthDayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "M/d"
-        return f
-    }()
-
-    private func tokenChartData(from data: [DailyModelTokens]) -> [ChartEntry] {
-        data.flatMap { day in
-            day.tokensByModel.compactMap { model, tokens -> ChartEntry? in
-                guard let date = UsageTracker.parseDate(day.date) else { return nil }
-                return ChartEntry(date: date, model: modelShortName(model), tokens: tokens)
-            }
-        }
-    }
-
-    private func shortDate(_ dateStr: String) -> String {
-        let parts = dateStr.split(separator: "-")
-        guard parts.count == 3,
-              let month = Int(parts[1]),
-              let day = Int(parts[2]) else { return dateStr }
-        return "\(month)/\(day)"
-    }
-
-    private func modelShortName(_ model: String) -> String {
-        if model.contains("opus") { return "Opus" }
-        if model.contains("sonnet") { return "Sonnet" }
-        if model.contains("haiku") { return "Haiku" }
-        return "Other"
-    }
-
-    private func statBadge(_ label: String, value: Int) -> some View {
-        VStack {
-            Text("\(value)")
-                .font(.title3.bold().monospacedDigit())
-            Text(label)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .background(Color.secondary.opacity(0.1))
-        .cornerRadius(8)
-    }
-
     private func loadData() {
         dailyUsage = (try? appState.usageTracker.parseDailyUsage()) ?? []
-        dailyActivity = (try? appState.usageTracker.parseDailyActivity()) ?? []
-        hourCounts = (try? appState.usageTracker.parseHourCounts()) ?? [:]
         overallBreakdown = (try? appState.usageTracker.modelBreakdown()) ?? [:]
+        todayTotal = (try? appState.usageTracker.todayUsage()) ?? 0
         weeklyTotal = (try? appState.usageTracker.weeklySummary()) ?? 0
-        totalAll = (try? appState.usageTracker.totalSummary()) ?? 0
+        monthlyTotal = (try? appState.usageTracker.monthlySummary()) ?? 0
         profileUsages = appState.usageTracker.loadProfileUsages()
     }
 
-    private func formatTokens(_ n: Int) -> String {
-        if n >= 1_000_000 { return String(format: "%.1fM tokens", Double(n) / 1_000_000) }
-        if n >= 1_000 { return String(format: "%.1fK tokens", Double(n) / 1_000) }
-        return "\(n) tokens"
+    private func tokenColor(_ cred: OAuthCredential) -> Color {
+        if cred.isExpired { return .red }
+        if cred.isExpiringSoon() { return .orange }
+        return .green
     }
-}
 
-private struct ChartEntry: Identifiable {
-    let id = UUID()
-    let date: Date
-    let model: String
-    let tokens: Int
+    private func formatTokens(_ n: Int) -> String {
+        if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
+        if n >= 1_000 { return String(format: "%.1fK", Double(n) / 1_000) }
+        return "\(n)"
+    }
 }
